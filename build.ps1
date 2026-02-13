@@ -192,11 +192,19 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host ""
-Write-Host "[信息] 开始编译..." -ForegroundColor Green
-Write-Host ""
+       Write-Host ""
+       Write-Host "[信息] 检查是否有程序正在运行..." -ForegroundColor Yellow
+       $process = Get-Process -Name "MAPF_AGV" -ErrorAction SilentlyContinue
+       if ($process) {
+           Write-Host "[警告] 检测到 MAPF_AGV.exe 正在运行，正在关闭..." -ForegroundColor Yellow
+           Stop-Process -Name "MAPF_AGV" -Force -ErrorAction SilentlyContinue
+           Start-Sleep -Seconds 1
+       }
+       
+       Write-Host "[信息] 开始编译..." -ForegroundColor Green
+       Write-Host ""
 
-cmake --build . --config Release
+       cmake --build . --config Release
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""

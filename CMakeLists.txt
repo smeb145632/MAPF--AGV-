@@ -91,19 +91,23 @@ set(CMAKE_AUTOUIC ON)
 # Source files
 set(SOURCES
     src/main.cpp
-    src/mainwindow.cpp
-    src/mapwidget.cpp
-    src/vehicle.cpp
-    src/map.cpp
-    src/controller.cpp
+    src/ui/mainwindow.cpp
+    src/ui/mapwidget.cpp
+    src/ui/mapeditor.cpp
+    src/core/vehicle.cpp
+    src/core/map.cpp
+    src/core/mapdata.cpp
+    src/control/controller.cpp
 )
 
 set(HEADERS
-    src/mainwindow.h
-    src/mapwidget.h
-    src/vehicle.h
-    src/map.h
-    src/controller.h
+    src/ui/mainwindow.h
+    src/ui/mapwidget.h
+    src/ui/mapeditor.h
+    src/core/vehicle.h
+    src/core/map.h
+    src/core/mapdata.h
+    src/control/controller.h
 )
 
 # Create executable

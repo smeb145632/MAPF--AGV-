@@ -4,9 +4,10 @@
 #include <QWidget>
 #include <QPainter>
 #include <QMouseEvent>
-#include "vehicle.h"
-#include "map.h"
-#include "controller.h"
+#include "../core/vehicle.h"
+#include "../core/map.h"
+#include "../core/mapdata.h"
+#include "../control/controller.h"
 
 /**
  * @brief 地图绘制组件
@@ -18,9 +19,10 @@ public:
     explicit MapWidget(QWidget* parent = nullptr);
     
     // 设置数据
-    void setVehicle(Vehicle* vehicle) { vehicle_ = vehicle; }
-    void setMap(Map* map) { map_ = map; }
-    void setController(Controller* controller) { controller_ = controller; }
+    void setVehicle(Vehicle* vehicle) { vehicle_ = vehicle; update(); }
+    void setMap(Map* map) { map_ = map; update(); }
+    void setController(Controller* controller) { controller_ = controller; update(); }
+    void setMapData(const MapData* mapData) { mapData_ = mapData; update(); }
 
 signals:
     void mouseClicked(const QPointF& worldPos, Qt::MouseButton button);
@@ -35,6 +37,7 @@ private:
     Vehicle* vehicle_;
     Map* map_;
     Controller* controller_;
+    const MapData* mapData_;  // 地图数据（点位和边）
     
     QRectF mapRect_;  // 地图绘制区域
     
@@ -49,6 +52,9 @@ private:
     void drawTrajectory(QPainter& painter);
     void drawGoal(QPainter& painter);
     void drawVehicle(QPainter& painter);
+    void drawAxes(QPainter& painter);  // 绘制坐标轴和标尺
+    void drawMapPoints(QPainter& painter);  // 绘制地图点位
+    void drawMapEdges(QPainter& painter);    // 绘制地图有向边
 };
 
 #endif // MAPWIDGET_H

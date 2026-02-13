@@ -1,6 +1,9 @@
 #include "mainwindow.h"
 #include <QApplication>
 #include <QMessageBox>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QKeySequence>
 #ifndef _USE_MATH_DEFINES
 #define _USE_MATH_DEFINES
 #endif
@@ -14,6 +17,9 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowTitle("AGV调度控制界面");
     resize(1200, 800);
     
+    // 创建菜单栏
+    setupMenuBar();
+    
     // 创建中央部件
     centralWidget_ = new QWidget(this);
     setCentralWidget(centralWidget_);
@@ -26,6 +32,7 @@ MainWindow::MainWindow(QWidget *parent)
     mapWidget_->setVehicle(&vehicle_);
     mapWidget_->setMap(&map_);
     mapWidget_->setController(&controller_);
+    mapWidget_->setMapData(&mapData_);
     connect(mapWidget_, &MapWidget::mouseClicked, this, [this](const QPointF& worldPos, Qt::MouseButton button) {
         QPointF clampedPos = map_.clampToMap(worldPos);
         if (button == Qt::LeftButton) {
@@ -90,7 +97,9 @@ MainWindow::MainWindow(QWidget *parent)
     algorithmCombo_ = new QComboBox(this);
     algorithmCombo_->addItem("先旋转再前进", Controller::ALGORITHM_ROTATE_THEN_MOVE);
     algorithmCombo_->addItem("边旋转边前进", Controller::ALGORITHM_MOVE_WHILE_ROTATE);
-    algorithmCombo_->setCurrentIndex(1);  // 默认使用边旋转边前进
+    algorithmCombo_->addItem("PID控制", Controller::ALGORITHM_PID_CONTROL);
+    algorithmCombo_->addItem("Pure Pursuit", Controller::ALGORITHM_PURE_PURSUIT);
+    algorithmCombo_->setCurrentIndex(2);  // 默认使用PID控制
     connect(algorithmCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MainWindow::onAlgorithmChanged);
     controlLayout_->addWidget(algorithmCombo_);
@@ -121,7 +130,11 @@ MainWindow::MainWindow(QWidget *parent)
     map_.setSize(50.0, 50.0);
     
     // 初始化控制器算法模式
-    controller_.setAlgorithmMode(Controller::ALGORITHM_MOVE_WHILE_ROTATE);
+    controller_.setAlgorithmMode(Controller::ALGORITHM_PID_CONTROL);
+    
+    // 创建地图编辑器
+    mapEditor_ = new MapEditor(this);
+    connect(mapEditor_, &MapEditor::mapDataChanged, this, &MainWindow::onMapDataChanged);
     
     // 创建定时器
     timer_ = new QTimer(this);
@@ -204,6 +217,21 @@ void MainWindow::onAlgorithmChanged(int index) {
     updateStatus();
 }
 
+void MainWindow::onOpenMapEditor() {
+    mapEditor_->setMapData(mapData_);
+    if (mapEditor_->exec() == QDialog::Accepted) {
+        mapData_ = mapEditor_->getMapData();
+        // 更新地图显示
+        mapWidget_->setMapData(&mapData_);
+    }
+}
+
+void MainWindow::onMapDataChanged(const MapData& data) {
+    mapData_ = data;
+    // 更新地图显示
+    mapWidget_->setMapData(&mapData_);
+}
+
 void MainWindow::updateStatus() {
     Vehicle::Pose pose = vehicle_.getPose();
     QString status = QString("状态: X=%1 m, Y=%2 m, θ=%3°")
@@ -229,5 +257,125 @@ void MainWindow::updateStatus() {
     }
     
     statusLabel_->setText(status);
+}
+
+void MainWindow::setupMenuBar() {
+    // 创建菜单栏
+    menuBar_ = menuBar();
+    
+    // 文件菜单
+    fileMenu_ = menuBar_->addMenu("文件(&F)");
+    
+    openMapAction_ = new QAction("打开地图(&O)", this);
+    openMapAction_->setShortcut(QKeySequence::Open);
+    openMapAction_->setStatusTip("打开地图文件");
+    connect(openMapAction_, &QAction::triggered, this, [this]() {
+        QString filePath = QFileDialog::getOpenFileName(this, "打开地图", 
+                                                         mapEditor_->getCurrentFilePath().isEmpty() ? "." : mapEditor_->getCurrentFilePath(),
+                                                         "地图文件 (*.json *.xml *.map);;JSON文件 (*.json);;XML文件 (*.xml);;二进制文件 (*.map);;所有文件 (*.*)");
+        if (!filePath.isEmpty()) {
+            bool success = false;
+            QString ext = QFileInfo(filePath).suffix().toLower();
+            if (ext == "json") {
+                success = mapData_.loadFromJson(filePath);
+            } else if (ext == "xml") {
+                success = mapData_.loadFromXml(filePath);
+            } else if (ext == "map") {
+                success = mapData_.loadFromBinary(filePath);
+            } else {
+                // 尝试自动检测
+                success = mapData_.loadFromJson(filePath) || 
+                         mapData_.loadFromXml(filePath) || 
+                         mapData_.loadFromBinary(filePath);
+            }
+            if (success) {
+                mapEditor_->setCurrentFilePath(filePath);
+                mapEditor_->setMapData(mapData_);
+                mapWidget_->setMapData(&mapData_);
+                QMessageBox::information(this, "成功", "地图加载成功！");
+            } else {
+                QMessageBox::warning(this, "错误", "地图加载失败！");
+            }
+        }
+    });
+    fileMenu_->addAction(openMapAction_);
+    
+    saveMapAction_ = new QAction("保存地图(&S)", this);
+    saveMapAction_->setShortcut(QKeySequence::Save);
+    saveMapAction_->setStatusTip("保存当前地图");
+    connect(saveMapAction_, &QAction::triggered, this, [this]() {
+        QString filePath = mapEditor_->getCurrentFilePath();
+        if (filePath.isEmpty()) {
+            filePath = QFileDialog::getSaveFileName(this, "保存地图", "map.json",
+                                                     "地图文件 (*.json *.xml *.map);;JSON文件 (*.json);;XML文件 (*.xml);;二进制文件 (*.map)");
+        }
+        if (!filePath.isEmpty()) {
+            bool success = false;
+            QString ext = QFileInfo(filePath).suffix().toLower();
+            if (ext == "json") {
+                success = mapData_.saveToJson(filePath);
+            } else if (ext == "xml") {
+                success = mapData_.saveToXml(filePath);
+            } else if (ext == "map") {
+                success = mapData_.saveToBinary(filePath);
+            } else {
+                success = mapData_.saveToJson(filePath + ".json");
+                filePath += ".json";
+            }
+            if (success) {
+                mapEditor_->setCurrentFilePath(filePath);
+                QMessageBox::information(this, "成功", "地图保存成功！");
+            } else {
+                QMessageBox::warning(this, "错误", "地图保存失败！");
+            }
+        }
+    });
+    fileMenu_->addAction(saveMapAction_);
+    
+    QAction* saveAsAction = new QAction("另存为(&A)...", this);
+    saveAsAction->setShortcut(QKeySequence::SaveAs);
+    saveAsAction->setStatusTip("另存为地图文件");
+    connect(saveAsAction, &QAction::triggered, this, [this]() {
+        QString filePath = QFileDialog::getSaveFileName(this, "另存为地图", "map.json",
+                                                         "地图文件 (*.json *.xml *.map);;JSON文件 (*.json);;XML文件 (*.xml);;二进制文件 (*.map)");
+        if (!filePath.isEmpty()) {
+            bool success = false;
+            QString ext = QFileInfo(filePath).suffix().toLower();
+            if (ext == "json") {
+                success = mapData_.saveToJson(filePath);
+            } else if (ext == "xml") {
+                success = mapData_.saveToXml(filePath);
+            } else if (ext == "map") {
+                success = mapData_.saveToBinary(filePath);
+            } else {
+                success = mapData_.saveToJson(filePath + ".json");
+                filePath += ".json";
+            }
+            if (success) {
+                mapEditor_->setCurrentFilePath(filePath);
+                QMessageBox::information(this, "成功", "地图保存成功！");
+            } else {
+                QMessageBox::warning(this, "错误", "地图保存失败！");
+            }
+        }
+    });
+    fileMenu_->addAction(saveAsAction);
+    
+    fileMenu_->addSeparator();
+    
+    QAction* exitAction = new QAction("退出(&X)", this);
+    exitAction->setShortcut(QKeySequence::Quit);
+    exitAction->setStatusTip("退出程序");
+    connect(exitAction, &QAction::triggered, this, &QMainWindow::close);
+    fileMenu_->addAction(exitAction);
+    
+    // 编辑菜单
+    editMenu_ = menuBar_->addMenu("编辑(&E)");
+    
+    mapEditorAction_ = new QAction("地图编辑器(&M)", this);
+    mapEditorAction_->setShortcut(QKeySequence("Ctrl+M"));
+    mapEditorAction_->setStatusTip("打开地图编辑器");
+    connect(mapEditorAction_, &QAction::triggered, this, &MainWindow::onOpenMapEditor);
+    editMenu_->addAction(mapEditorAction_);
 }
 

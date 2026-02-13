@@ -150,6 +150,14 @@ if %errorlevel% neq 0 (
 )
 
 echo.
+echo [信息] 检查是否有程序正在运行...
+tasklist | findstr /I "MAPF_AGV.exe" >nul
+if %errorlevel% equ 0 (
+    echo [警告] 检测到 MAPF_AGV.exe 正在运行，正在关闭...
+    taskkill /F /IM MAPF_AGV.exe >nul 2>&1
+    timeout /t 1 /nobreak >nul
+)
+
 echo [信息] 开始编译...
 echo.
 
