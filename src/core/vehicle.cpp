@@ -25,28 +25,25 @@ void Vehicle::update(double dt, double v, double omega) {
     // 限制速度
     limitVelocity(v, omega);
     
-    // Ackermann转向模型（4轮车物理模型）
-    // 将角速度转换为转向角：ω = (v * tan(δ)) / L
-    // 因此：δ = atan(ω * L / v)
-    double delta = 0.0;
-    if (std::abs(v) > 1e-6) {
-        delta = std::atan(omega * properties_.wheelbase / v);
-        // 限制转向角
-        delta = std::max(-properties_.maxSteeringAngle, 
-                        std::min(properties_.maxSteeringAngle, delta));
-    } else {
-        // 速度为0时，只能原地旋转（特殊情况）
-        if (std::abs(omega) > 1e-6) {
-            pose_.theta += omega * dt;
-            // 归一化角度
-            while (pose_.theta > M_PI) pose_.theta -= 2 * M_PI;
-            while (pose_.theta < -M_PI) pose_.theta += 2 * M_PI;
-            addTrajectoryPoint();
-            return;
-        }
+    // 传统4轮Ackermann车物理约束：无法原地转向（无差速机构）
+    // 当|v|很小时需要转向，采用最小蠕行速度近似实现
+    const double eps = 1e-6;
+    if (std::abs(v) < eps && std::abs(omega) > eps) {
+        double creep = properties_.minCreepVelocity;
+        v = (omega > 0) ? creep : -creep;  // 保持转向方向
+        limitVelocity(v, omega);  // 重新限制使ω与v物理一致
     }
     
-    // 使用Ackermann运动学方程更新位置
+    // 角速度转转向角：ω = (v·tan(δ))/L  =>  δ = atan(ω·L/v)
+    double delta = 0.0;
+    if (std::abs(v) > eps) {
+        delta = std::atan(omega * properties_.wheelbase / v);
+        delta = std::max(-properties_.maxSteeringAngle,
+                        std::min(properties_.maxSteeringAngle, delta));
+        // 转向角限制后，实际ω由δ决定
+        omega = (v * std::tan(delta)) / properties_.wheelbase;
+    }
+    
     updateWithSteering(dt, v, delta);
 }
 

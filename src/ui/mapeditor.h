@@ -102,3 +102,4 @@ private:
 
 #endif // MAPEDITOR_H
 
+

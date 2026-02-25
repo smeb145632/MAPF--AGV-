@@ -99,7 +99,9 @@ MainWindow::MainWindow(QWidget *parent)
     algorithmCombo_->addItem("边旋转边前进", Controller::ALGORITHM_MOVE_WHILE_ROTATE);
     algorithmCombo_->addItem("PID控制", Controller::ALGORITHM_PID_CONTROL);
     algorithmCombo_->addItem("Pure Pursuit", Controller::ALGORITHM_PURE_PURSUIT);
-    algorithmCombo_->setCurrentIndex(2);  // 默认使用PID控制
+    algorithmCombo_->addItem("Stanley（精度最优）", Controller::ALGORITHM_STANLEY);
+    algorithmCombo_->addItem("滑模/切换（全姿态可达）", Controller::ALGORITHM_SLIDING_MODE);
+    algorithmCombo_->setCurrentIndex(5);  // 默认滑模
     connect(algorithmCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MainWindow::onAlgorithmChanged);
     controlLayout_->addWidget(algorithmCombo_);
@@ -129,8 +131,8 @@ MainWindow::MainWindow(QWidget *parent)
     // 初始化地图
     map_.setSize(50.0, 50.0);
     
-    // 初始化控制器算法模式
-    controller_.setAlgorithmMode(Controller::ALGORITHM_PID_CONTROL);
+    // 初始化控制器算法模式（与下拉框默认一致）
+    controller_.setAlgorithmMode(Controller::ALGORITHM_SLIDING_MODE);
     
     // 创建地图编辑器
     mapEditor_ = new MapEditor(this);

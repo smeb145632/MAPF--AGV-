@@ -14,15 +14,16 @@ public:
     Vehicle();
     Vehicle(double x, double y, double theta);
     
-    // 车辆属性
+    // 车辆属性（传统4轮Ackermann转向模型）
     struct VehicleProperties {
         double length = 2.0;        // 车身长度 (m)
-        double width = 1.0;         // 车身宽度 (m)
-        double wheelbase = 1.5;     // 轴距 (m) - Ackermann模型关键参数
-        double maxSpeed = 2.0;      // 最大速度 (m/s)
+        double width = 1.0;          // 车身宽度 (m)
+        double wheelbase = 1.5;      // 轴距 (m) - 前轴到后轴距离
+        double maxSpeed = 2.0;       // 最大速度 (m/s)
         double maxAngularVelocity = 1.0; // 最大角速度 (rad/s)
         double maxSteeringAngle = 0.5236; // 最大转向角 (rad) = 30度
-        double wheelRadius = 0.3;   // 轮子半径 (m)
+        double wheelRadius = 0.3;    // 轮子半径 (m)
+        double minCreepVelocity = 0.1;   // 最小蠕行速度 (m/s) - 4轮车无法原地转向时的替代
     };
     
     // 位置和姿态
@@ -48,8 +49,8 @@ public:
     void setPose(double x, double y, double theta);
     void setColor(const QColor& color) { color_ = color; }
     
-    // 运动学更新（基于速度模型）
-    // 使用Ackermann转向模型（4轮车物理模型）
+    // 运动学更新（基于(v,ω)接口，兼容控制器）
+    // 物理约束：4轮车无法原地转向，低速时采用最小蠕行速度
     void update(double dt, double v, double omega);
     
     // 运动学更新（基于转向角模型，更符合物理）
