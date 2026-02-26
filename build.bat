@@ -1,10 +1,45 @@
 @echo off
 chcp 65001 >nul
-REM AGV项目构建脚本
+REM AGV项目构建脚本 - 双击即可运行，无需 Developer Command Prompt
+
+REM 确保在脚本所在目录执行
+cd /d "%~dp0"
 
 echo ========================================
 echo AGV调度控制界面 - 构建脚本
 echo ========================================
+echo.
+
+REM 在开始前先设置 Visual Studio 环境（确保双击即可编译）
+set "VCVARS="
+
+REM 方法1：使用 vswhere 自动查找（支持任意安装路径和版本）
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
+    for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2^>nul`) do (
+        if exist "%%i\VC\Auxiliary\Build\vcvars64.bat" set "VCVARS=%%i\VC\Auxiliary\Build\vcvars64.bat"
+    )
+)
+
+REM 方法2：固定路径兜底（vswhere 未找到时）
+if "%VCVARS%"=="" if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" set "VCVARS=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+if "%VCVARS%"=="" if exist "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat" set "VCVARS=C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
+if "%VCVARS%"=="" if exist "C:\Program Files\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat" set "VCVARS=C:\Program Files\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
+if "%VCVARS%"=="" if exist "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat" set "VCVARS=C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
+
+REM 方法3：vswhere 放宽条件（仅按安装路径查找，不要求C++组件）
+if "%VCVARS%"=="" if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
+    for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath 2^>nul`) do (
+        if exist "%%i\VC\Auxiliary\Build\vcvars64.bat" set "VCVARS=%%i\VC\Auxiliary\Build\vcvars64.bat"
+    )
+)
+
+if not "%VCVARS%"=="" (
+    echo [信息] 正在配置 MSVC 编译环境...
+    call "%VCVARS%" >nul 2>&1
+    echo [信息] 编译环境就绪
+) else (
+    echo [警告] 未找到 Visual Studio，将尝试使用系统 PATH 中的编译器
+)
 echo.
 
 REM 检查是否有清理参数
@@ -58,61 +93,22 @@ if "%QT_PATH%"=="" (
     if "%QT_PATH%"=="" set "QT_PATH="
 )
 
-REM 检查编译器 - 使用更可靠的方法
+REM 检查编译器
 echo [信息] 检查C++编译器...
 where cl.exe >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [警告] 未找到MSVC编译器，尝试自动设置...
+    echo [错误] 未找到 MSVC 编译器 ^(cl.exe^)
     echo.
-    
-    REM 尝试自动查找并设置Visual Studio环境
-    set "VS_SETUP=0"
-    
-    REM 检查VS2026 (版本18)
-    if exist "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" (
-        echo [信息] 找到Visual Studio 2026，正在设置环境...
-        call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
-        set "VS_SETUP=1"
-    ) else if exist "C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Auxiliary\Build\vcvars64.bat" (
-        echo [信息] 找到Visual Studio 2026，正在设置环境...
-        call "C:\Program Files\Microsoft Visual Studio\18\Professional\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
-        set "VS_SETUP=1"
-    ) else if exist "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat" (
-        echo [信息] 找到Visual Studio 2026，正在设置环境...
-        call "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
-        set "VS_SETUP=1"
-    REM 检查VS2022
-    ) else if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" (
-        echo [信息] 找到Visual Studio 2022，正在设置环境...
-        call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
-        set "VS_SETUP=1"
-    ) else if exist "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat" (
-        echo [信息] 找到Visual Studio 2019，正在设置环境...
-        call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
-        set "VS_SETUP=1"
-    ) else if exist "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars64.bat" (
-        echo [信息] 找到Visual Studio 2017，正在设置环境...
-        call "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
-        set "VS_SETUP=1"
-    )
-    
-    REM 再次检查编译器
-    where cl.exe >nul 2>&1
-    if %errorlevel% neq 0 (
-        if "%VS_SETUP%"=="0" (
-            echo [错误] 未找到Visual Studio
-            echo.
-            echo 请安装Visual Studio或使用Developer Command Prompt运行此脚本
-            echo.
-            pause
-            exit /b 1
-        ) else (
-            echo [错误] 设置编译环境失败
-            echo 请使用Developer Command Prompt for VS运行此脚本
-            pause
-            exit /b 1
-        )
-    )
+    echo 解决方法：
+    echo 1. 安装 Visual Studio 或 Build Tools，并勾选「使用 C++ 的桌面开发」
+    echo    下载: https://visualstudio.microsoft.com/downloads/
+    echo    或 Build Tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+    echo.
+    echo 2. 若已安装，请用「Developer Command Prompt for VS」运行此脚本
+    echo    开始菜单搜索 "Developer Command Prompt" 并打开
+    echo.
+    pause
+    exit /b 1
 )
 
 echo [信息] MSVC编译器已就绪
@@ -175,22 +171,22 @@ echo [成功] 编译完成！
 echo 可执行文件位置: build\Release\MAPF_AGV.exe
 echo.
 
-REM 部署 Qt DLL（解决找不到 Qt5Gui.dll 等问题）
-if exist "build\Release\MAPF_AGV.exe" (
+REM 部署 Qt DLL（解决找不到 Qt5Gui.dll 等问题，你已通过PATH解决可忽略）
+if exist "Release\MAPF_AGV.exe" (
     if not "%QT_PATH%"=="" (
         if exist "%QT_PATH%\bin\windeployqt.exe" (
             echo [信息] 正在部署 Qt 依赖库...
-            "%QT_PATH%\bin\windeployqt.exe" --release --no-translations "build\Release\MAPF_AGV.exe"
+            "%QT_PATH%\bin\windeployqt.exe" --release --no-translations "Release\MAPF_AGV.exe"
             echo [成功] Qt DLL 已复制，可直接运行
         ) else (
             echo [警告] 未找到 windeployqt，请手动运行:
-            echo   "%QT_PATH%\bin\windeployqt.exe" --release build\Release\MAPF_AGV.exe
+            echo   "%QT_PATH%\bin\windeployqt.exe" --release Release\MAPF_AGV.exe
         )
     ) else (
         where windeployqt >nul 2>&1
         if %errorlevel% equ 0 (
             echo [信息] 正在部署 Qt 依赖库...
-            windeployqt --release --no-translations build\Release\MAPF_AGV.exe
+            windeployqt --release --no-translations Release\MAPF_AGV.exe
             echo [成功] Qt DLL 已复制
         ) else (
             echo [警告] 请手动运行 windeployqt 部署 Qt DLL
