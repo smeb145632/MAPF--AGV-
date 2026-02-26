@@ -220,8 +220,35 @@ Write-Host "[成功] 编译完成！" -ForegroundColor Green
 Write-Host "可执行文件位置: build\Release\MAPF_AGV.exe" -ForegroundColor Cyan
 Write-Host ""
 
-# 检查可执行文件是否存在
+# 部署 Qt DLL（解决找不到 Qt5Gui.dll 等问题）
 $exePath = Join-Path $originalLocation "build\Release\MAPF_AGV.exe"
+if (Test-Path $exePath) {
+    $windeployqt = $null
+    if ($qtPath) {
+        $wdp = Join-Path $qtPath "bin\windeployqt.exe"
+        if (Test-Path $wdp) { $windeployqt = $wdp }
+    }
+    if (-not $windeployqt) {
+        $windeployqt = Get-Command windeployqt -ErrorAction SilentlyContinue
+        if ($windeployqt) { $windeployqt = $windeployqt.Source }
+    }
+    if ($windeployqt) {
+        Write-Host "[信息] 正在部署 Qt 依赖库 (windeployqt)..." -ForegroundColor Green
+        & $windeployqt --release --no-translations $exePath
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[成功] Qt DLL 已复制到 exe 目录，可直接运行" -ForegroundColor Green
+        } else {
+            Write-Host "[警告] windeployqt 执行失败，请手动部署" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "[警告] 未找到 windeployqt，Qt DLL 需手动部署" -ForegroundColor Yellow
+        Write-Host "  方法: 将 Qt 安装目录下的 bin\windeployqt.exe 添加到 PATH" -ForegroundColor Gray
+        Write-Host "  或运行: <Qt的bin目录>\windeployqt.exe --release build\Release\MAPF_AGV.exe" -ForegroundColor Gray
+    }
+    Write-Host ""
+}
+
+# 检查可执行文件是否存在
 if (Test-Path $exePath) {
     $fileInfo = Get-Item $exePath
     Write-Host "文件大小: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Gray

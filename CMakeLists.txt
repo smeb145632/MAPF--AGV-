@@ -64,6 +64,7 @@ if(WIN32 AND NOT CMAKE_PREFIX_PATH)
         "C:/Qt/Qt5.9.0/5.9/msvc2017_64"
         "C:/Qt/Qt5.9.0/5.9/msvc2015_64"
         "C:/Qt/Qt5.9.0/5.9/msvc2013_64"
+	"E:/qt-env/5.9/msvc2017_64"
     )
     
     foreach(QT_PATH ${QT_POSSIBLE_PATHS})

@@ -18,6 +18,8 @@ void Vehicle::setPose(double x, double y, double theta) {
     pose_.x = x;
     pose_.y = y;
     pose_.theta = theta;
+    // 设置位姿相当于“瞬移”，需清除旧轨迹以避免从(0,0)等历史点产生跳线
+    trajectory_.clear();
     addTrajectoryPoint();
 }
 

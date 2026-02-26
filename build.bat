@@ -41,8 +41,8 @@ REM 尝试自动查找Qt
 set QT_PATH=
 if exist "C:\Qt\Qt5.9.0\5.9\msvc2017_64" (
     set QT_PATH=C:\Qt\Qt5.9.0\5.9\msvc2017_64
-) else if exist "C:\Qt\Qt5.9.0\5.9\msvc2015_64" (
-    set QT_PATH=C:\Qt\Qt5.9.0\5.9\msvc2015_64
+) else if exist "E:\qt-env\5.9\msvc2017_64" (
+    set QT_PATH=E:\qt-env\5.9\msvc2017_64
 ) else if exist "C:\Qt\5.9.0\msvc2017_64" (
     set QT_PATH=C:\Qt\5.9.0\msvc2017_64
 ) else if exist "C:\Qt\5.9.0\msvc2015_64" (
@@ -174,6 +174,31 @@ echo.
 echo [成功] 编译完成！
 echo 可执行文件位置: build\Release\MAPF_AGV.exe
 echo.
+
+REM 部署 Qt DLL（解决找不到 Qt5Gui.dll 等问题）
+if exist "build\Release\MAPF_AGV.exe" (
+    if not "%QT_PATH%"=="" (
+        if exist "%QT_PATH%\bin\windeployqt.exe" (
+            echo [信息] 正在部署 Qt 依赖库...
+            "%QT_PATH%\bin\windeployqt.exe" --release --no-translations "build\Release\MAPF_AGV.exe"
+            echo [成功] Qt DLL 已复制，可直接运行
+        ) else (
+            echo [警告] 未找到 windeployqt，请手动运行:
+            echo   "%QT_PATH%\bin\windeployqt.exe" --release build\Release\MAPF_AGV.exe
+        )
+    ) else (
+        where windeployqt >nul 2>&1
+        if %errorlevel% equ 0 (
+            echo [信息] 正在部署 Qt 依赖库...
+            windeployqt --release --no-translations build\Release\MAPF_AGV.exe
+            echo [成功] Qt DLL 已复制
+        ) else (
+            echo [警告] 请手动运行 windeployqt 部署 Qt DLL
+        )
+    )
+    echo.
+)
+
 echo 使用说明:
 echo   - 运行程序: build\Release\MAPF_AGV.exe
 echo   - 清理构建: build.bat clean
