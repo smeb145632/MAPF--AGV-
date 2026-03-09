@@ -221,6 +221,8 @@ void MainWindow::onAlgorithmChanged(int index) {
 
 void MainWindow::onOpenMapEditor() {
     mapEditor_->setMapData(mapData_);
+    Map::MapProperties props = map_.getProperties();
+    mapEditor_->setMapSize(props.width, props.height);
     if (mapEditor_->exec() == QDialog::Accepted) {
         mapData_ = mapEditor_->getMapData();
         // 更新地图显示

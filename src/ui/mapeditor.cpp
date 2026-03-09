@@ -1,12 +1,16 @@
 #include "mapeditor.h"
 #include <QHeaderView>
 #include <QSpinBox>
+#include <QAbstractButton>
 #include <QDebug>
+#include <QFileInfo>
+#include <QSplitter>
 
 MapEditor::MapEditor(QWidget* parent)
     : QDialog(parent), isUpdating_(false) {
     setWindowTitle("地图编辑器");
-    setMinimumSize(1000, 700);
+    setMinimumSize(1200, 750);
+    resize(1300, 800);
     setupUI();
     updatePointTable();
     updateEdgeTable();
@@ -15,9 +19,9 @@ MapEditor::MapEditor(QWidget* parent)
 MapEditor::~MapEditor() {}
 
 void MapEditor::setupUI() {
-    mainLayout_ = new QVBoxLayout(this);
-    
-    // 文件操作按钮
+    QVBoxLayout* topLayout = new QVBoxLayout(this);
+
+    // 顶部：文件操作
     buttonLayout_ = new QHBoxLayout();
     formatLabel_ = new QLabel("保存格式:", this);
     formatCombo_ = new QComboBox(this);
@@ -25,12 +29,12 @@ void MapEditor::setupUI() {
     formatCombo_->addItem("XML (*.xml)", "xml");
     formatCombo_->addItem("二进制 (*.map)", "map");
     formatCombo_->setCurrentIndex(0);
-    
+
     loadBtn_ = new QPushButton("读取地图", this);
     saveBtn_ = new QPushButton("保存地图", this);
     saveAsBtn_ = new QPushButton("另存为", this);
     closeBtn_ = new QPushButton("关闭", this);
-    
+
     buttonLayout_->addWidget(formatLabel_);
     buttonLayout_->addWidget(formatCombo_);
     buttonLayout_->addStretch();
@@ -38,21 +42,61 @@ void MapEditor::setupUI() {
     buttonLayout_->addWidget(saveBtn_);
     buttonLayout_->addWidget(saveAsBtn_);
     buttonLayout_->addWidget(closeBtn_);
-    
-    mainLayout_->addLayout(buttonLayout_);
-    
-    // 点位编辑区域
-    pointGroup_ = new QGroupBox("点位管理", this);
-    QVBoxLayout* pointLayout = new QVBoxLayout();
-    
-    QHBoxLayout* pointButtonLayout = new QHBoxLayout();
+    topLayout->addLayout(buttonLayout_);
+
+    // 中央区域：左侧工具栏 + 画布
+    QSplitter* splitter = new QSplitter(Qt::Horizontal, this);
+
+    leftPanel_ = new QWidget(this);
+    QVBoxLayout* leftLayout = new QVBoxLayout(leftPanel_);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+
+    // 左侧工具栏
+    QGroupBox* toolGroup = new QGroupBox("编辑工具", this);
+    QVBoxLayout* toolLayout = new QVBoxLayout();
+    toolButtonGroup_ = new QButtonGroup(this);
+
+    selectModeBtn_ = new QPushButton("选择模式", this);
+    selectModeBtn_->setCheckable(true);
+    selectModeBtn_->setChecked(true);
+    toolButtonGroup_->addButton(selectModeBtn_, MapEditorCanvas::MODE_SELECT);
+
     addPointBtn_ = new QPushButton("添加点位", this);
+    addPointBtn_->setCheckable(true);
+    addPointBtn_->setToolTip("点击地图任意位置添加点位");
+    toolButtonGroup_->addButton(addPointBtn_, MapEditorCanvas::MODE_ADD_POINT);
+
+    addEdgeBtn_ = new QPushButton("添加边", this);
+    addEdgeBtn_->setCheckable(true);
+    addEdgeBtn_->setToolTip("先点击起点，再点击终点添加边");
+    toolButtonGroup_->addButton(addEdgeBtn_, MapEditorCanvas::MODE_ADD_EDGE);
+
     removePointBtn_ = new QPushButton("删除点位", this);
-    removePointBtn_->setEnabled(false);
-    pointButtonLayout->addWidget(addPointBtn_);
-    pointButtonLayout->addWidget(removePointBtn_);
-    pointButtonLayout->addStretch();
-    
+    removePointBtn_->setCheckable(true);
+    removePointBtn_->setToolTip("点击地图上的点位删除");
+    toolButtonGroup_->addButton(removePointBtn_, MapEditorCanvas::MODE_REMOVE_POINT);
+
+    removeEdgeBtn_ = new QPushButton("删除边", this);
+    removeEdgeBtn_->setCheckable(true);
+    removeEdgeBtn_->setToolTip("点击地图上的边删除");
+    toolButtonGroup_->addButton(removeEdgeBtn_, MapEditorCanvas::MODE_REMOVE_EDGE);
+
+    toolLayout->addWidget(selectModeBtn_);
+    toolLayout->addWidget(addPointBtn_);
+    toolLayout->addWidget(addEdgeBtn_);
+    toolLayout->addWidget(removePointBtn_);
+    toolLayout->addWidget(removeEdgeBtn_);
+    toolLayout->addStretch();
+    toolGroup->setLayout(toolLayout);
+    leftLayout->addWidget(toolGroup);
+
+    // 点位列表
+    pointGroup_ = new QGroupBox("点位列表", this);
+    QVBoxLayout* pointLayout = new QVBoxLayout();
+    removePointTableBtn_ = new QPushButton("删除选中", this);
+    removePointTableBtn_->setEnabled(false);
+    pointLayout->addWidget(removePointTableBtn_);
+
     pointTable_ = new QTableWidget(this);
     pointTable_->setColumnCount(6);
     pointTable_->setHorizontalHeaderLabels(QStringList() << "ID" << "名称" << "X (m)" << "Y (m)" << "角度 (rad)" << "类型");
@@ -60,25 +104,18 @@ void MapEditor::setupUI() {
     pointTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
     pointTable_->setSelectionMode(QAbstractItemView::SingleSelection);
     pointTable_->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked);
-    
-    pointLayout->addLayout(pointButtonLayout);
+    pointTable_->setMaximumHeight(180);
     pointLayout->addWidget(pointTable_);
     pointGroup_->setLayout(pointLayout);
-    
-    mainLayout_->addWidget(pointGroup_);
-    
-    // 边编辑区域
-    edgeGroup_ = new QGroupBox("边管理", this);
+    leftLayout->addWidget(pointGroup_);
+
+    // 边列表
+    edgeGroup_ = new QGroupBox("边列表", this);
     QVBoxLayout* edgeLayout = new QVBoxLayout();
-    
-    QHBoxLayout* edgeButtonLayout = new QHBoxLayout();
-    addEdgeBtn_ = new QPushButton("添加边", this);
-    removeEdgeBtn_ = new QPushButton("删除边", this);
-    removeEdgeBtn_->setEnabled(false);
-    edgeButtonLayout->addWidget(addEdgeBtn_);
-    edgeButtonLayout->addWidget(removeEdgeBtn_);
-    edgeButtonLayout->addStretch();
-    
+    removeEdgeTableBtn_ = new QPushButton("删除选中", this);
+    removeEdgeTableBtn_->setEnabled(false);
+    edgeLayout->addWidget(removeEdgeTableBtn_);
+
     edgeTable_ = new QTableWidget(this);
     edgeTable_->setColumnCount(6);
     edgeTable_->setHorizontalHeaderLabels(QStringList() << "起点ID" << "起点名称" << "终点ID" << "终点名称" << "导航模式" << "行驶模式");
@@ -86,41 +123,70 @@ void MapEditor::setupUI() {
     edgeTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
     edgeTable_->setSelectionMode(QAbstractItemView::SingleSelection);
     edgeTable_->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked);
-    
-    edgeLayout->addLayout(edgeButtonLayout);
+    edgeTable_->setMaximumHeight(180);
     edgeLayout->addWidget(edgeTable_);
     edgeGroup_->setLayout(edgeLayout);
-    
-    mainLayout_->addWidget(edgeGroup_);
-    
+    leftLayout->addWidget(edgeGroup_);
+
+    leftLayout->addStretch();
+    leftPanel_->setMaximumWidth(320);
+    splitter->addWidget(leftPanel_);
+
+    // 中央画布
+    canvas_ = new MapEditorCanvas(this);
+    canvas_->setMapData(&mapData_);
+    connect(canvas_, &MapEditorCanvas::mapDataChanged, this, &MapEditor::onCanvasMapDataChanged);
+    splitter->addWidget(canvas_);
+
+    splitter->setStretchFactor(0, 0);
+    splitter->setStretchFactor(1, 1);
+    topLayout->addWidget(splitter);
+
     // 连接信号
     connect(loadBtn_, &QPushButton::clicked, this, &MapEditor::onLoadMap);
     connect(saveBtn_, &QPushButton::clicked, this, &MapEditor::onSaveMap);
     connect(saveAsBtn_, &QPushButton::clicked, this, &MapEditor::onSaveAsMap);
     connect(closeBtn_, &QPushButton::clicked, this, &QDialog::accept);
-    
-    connect(addPointBtn_, &QPushButton::clicked, this, &MapEditor::onAddPoint);
-    connect(removePointBtn_, &QPushButton::clicked, this, &MapEditor::onRemovePoint);
+
+    connect(toolButtonGroup_, QOverload<QAbstractButton*>::of(&QButtonGroup::buttonClicked),
+            this, [this](QAbstractButton* btn) {
+        int id = toolButtonGroup_->id(btn);
+        onEditModeChanged(id);
+    });
+
+    connect(removePointTableBtn_, &QPushButton::clicked, this, &MapEditor::onRemovePointFromTable);
     connect(pointTable_, &QTableWidget::itemSelectionChanged, this, &MapEditor::onPointSelectionChanged);
     connect(pointTable_, &QTableWidget::cellChanged, this, &MapEditor::onPointDataChanged);
-    
-    connect(addEdgeBtn_, &QPushButton::clicked, this, &MapEditor::onAddEdge);
-    connect(removeEdgeBtn_, &QPushButton::clicked, this, &MapEditor::onRemoveEdge);
+
+    connect(removeEdgeTableBtn_, &QPushButton::clicked, this, &MapEditor::onRemoveEdgeFromTable);
     connect(edgeTable_, &QTableWidget::itemSelectionChanged, this, &MapEditor::onEdgeSelectionChanged);
     connect(edgeTable_, &QTableWidget::cellChanged, this, &MapEditor::onEdgeDataChanged);
-    
-    connect(formatCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), 
+
+    connect(formatCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MapEditor::onFormatChanged);
 }
 
+void MapEditor::setMapSize(double width, double height) {
+    canvas_->setMapSize(width, height);
+}
+
+void MapEditor::onEditModeChanged(int mode) {
+    canvas_->setEditMode(static_cast<MapEditorCanvas::EditMode>(mode));
+}
+
+void MapEditor::onCanvasMapDataChanged() {
+    updatePointTable();
+    updateEdgeTable();
+    emit mapDataChanged(mapData_);
+}
+
 void MapEditor::onFormatChanged(int index) {
-    // 格式改变时的处理（可以在这里更新UI提示等）
     Q_UNUSED(index);
-    // 目前不需要特殊处理，保存时会根据选择的格式保存
 }
 
 void MapEditor::setMapData(const MapData& data) {
     mapData_ = data;
+    canvas_->setMapData(&mapData_);
     updatePointTable();
     updateEdgeTable();
 }
@@ -128,70 +194,56 @@ void MapEditor::setMapData(const MapData& data) {
 void MapEditor::updatePointTable() {
     isUpdating_ = true;
     pointTable_->setRowCount(0);
-    
+
     QVector<MapData::Point> points = mapData_.getAllPoints();
     pointTable_->setRowCount(points.size());
-    
+
     for (int i = 0; i < points.size(); ++i) {
         const MapData::Point& point = points[i];
         updatePointRow(i, point);
     }
-    
+
     isUpdating_ = false;
 }
 
 void MapEditor::updatePointRow(int row, const MapData::Point& point) {
-    // ID
     QTableWidgetItem* idItem = new QTableWidgetItem(QString::number(point.id));
     idItem->setFlags(idItem->flags() & ~Qt::ItemIsEditable);
     pointTable_->setItem(row, 0, idItem);
-    
-    // 名称
+
     pointTable_->setItem(row, 1, new QTableWidgetItem(point.name));
-    
-    // X坐标
-    QTableWidgetItem* xItem = new QTableWidgetItem(QString::number(point.x, 'f', 2));
-    pointTable_->setItem(row, 2, xItem);
-    
-    // Y坐标
-    QTableWidgetItem* yItem = new QTableWidgetItem(QString::number(point.y, 'f', 2));
-    pointTable_->setItem(row, 3, yItem);
-    
-    // 角度
-    QTableWidgetItem* thetaItem = new QTableWidgetItem(QString::number(point.theta, 'f', 3));
-    pointTable_->setItem(row, 4, thetaItem);
-    
-    // 类型
+    pointTable_->setItem(row, 2, new QTableWidgetItem(QString::number(point.x, 'f', 2)));
+    pointTable_->setItem(row, 3, new QTableWidgetItem(QString::number(point.y, 'f', 2)));
+    pointTable_->setItem(row, 4, new QTableWidgetItem(QString::number(point.theta, 'f', 3)));
+
     QComboBox* typeCombo = new QComboBox();
     typeCombo->addItem("工位点", MapData::POINT_WORKSTATION);
     typeCombo->addItem("路径点", MapData::POINT_PATH);
     typeCombo->addItem("休息点", MapData::POINT_REST);
     typeCombo->setCurrentIndex(static_cast<int>(point.type));
     pointTable_->setCellWidget(row, 5, typeCombo);
-    connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), 
+    connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             [this, row]() { onPointDataChanged(row, 5); });
 }
 
 void MapEditor::updateEdgeTable() {
     isUpdating_ = true;
     edgeTable_->setRowCount(0);
-    
+
     QVector<MapData::Edge> edges = mapData_.getAllEdges();
     edgeTable_->setRowCount(edges.size());
-    
+
     for (int i = 0; i < edges.size(); ++i) {
         const MapData::Edge& edge = edges[i];
         updateEdgeRow(i, edge);
     }
-    
+
     isUpdating_ = false;
 }
 
 void MapEditor::updateEdgeRow(int row, const MapData::Edge& edge) {
-    // 获取所有点位用于下拉框
     QVector<MapData::Point> points = mapData_.getAllPoints();
-    
-    // 起点ID（使用下拉框选择）
+
     QComboBox* startIdCombo = new QComboBox();
     for (const MapData::Point& point : points) {
         QString itemText = QString("%1 - %2").arg(point.id).arg(point.name);
@@ -203,13 +255,11 @@ void MapEditor::updateEdgeRow(int row, const MapData::Edge& edge) {
     edgeTable_->setCellWidget(row, 0, startIdCombo);
     connect(startIdCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             [this, row]() { onEdgeDataChanged(row, 0); });
-    
-    // 起点名称（自动更新，不可编辑）
+
     QTableWidgetItem* startNameItem = new QTableWidgetItem(edge.startName);
     startNameItem->setFlags(startNameItem->flags() & ~Qt::ItemIsEditable);
     edgeTable_->setItem(row, 1, startNameItem);
-    
-    // 终点ID（使用下拉框选择）
+
     QComboBox* endIdCombo = new QComboBox();
     for (const MapData::Point& point : points) {
         QString itemText = QString("%1 - %2").arg(point.id).arg(point.name);
@@ -221,13 +271,11 @@ void MapEditor::updateEdgeRow(int row, const MapData::Edge& edge) {
     edgeTable_->setCellWidget(row, 2, endIdCombo);
     connect(endIdCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             [this, row]() { onEdgeDataChanged(row, 2); });
-    
-    // 终点名称（自动更新，不可编辑）
+
     QTableWidgetItem* endNameItem = new QTableWidgetItem(edge.endName);
     endNameItem->setFlags(endNameItem->flags() & ~Qt::ItemIsEditable);
     edgeTable_->setItem(row, 3, endNameItem);
-    
-    // 导航模式
+
     QComboBox* navCombo = new QComboBox();
     navCombo->addItem("前进", MapData::NAV_FORWARD);
     navCombo->addItem("后退", MapData::NAV_BACKWARD);
@@ -235,8 +283,7 @@ void MapEditor::updateEdgeRow(int row, const MapData::Edge& edge) {
     edgeTable_->setCellWidget(row, 4, navCombo);
     connect(navCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             [this, row]() { onEdgeDataChanged(row, 4); });
-    
-    // 行驶模式
+
     QComboBox* driveCombo = new QComboBox();
     driveCombo->addItem("直线", MapData::DRIVE_STRAIGHT);
     driveCombo->addItem("曲线", MapData::DRIVE_CURVE);
@@ -247,13 +294,12 @@ void MapEditor::updateEdgeRow(int row, const MapData::Edge& edge) {
 }
 
 void MapEditor::onLoadMap() {
-    QString filePath = QFileDialog::getOpenFileName(this, "读取地图", 
+    QString filePath = QFileDialog::getOpenFileName(this, "读取地图",
                                                      currentFilePath_.isEmpty() ? "." : currentFilePath_,
                                                      getFileFilter());
     if (!filePath.isEmpty()) {
         if (loadMapFile(filePath)) {
             currentFilePath_ = filePath;
-            // 刷新显示
             updatePointTable();
             updateEdgeTable();
             QMessageBox::information(this, "成功", "地图加载成功！");
@@ -291,15 +337,7 @@ void MapEditor::onSaveAsMap() {
     }
 }
 
-void MapEditor::onAddPoint() {
-    int newId = mapData_.getNextPointId();
-    MapData::Point newPoint("新点位", newId, 0.0, 0.0, 0.0, MapData::POINT_PATH);
-    mapData_.addPoint(newPoint);
-    updatePointTable();
-    emit mapDataChanged(mapData_);
-}
-
-void MapEditor::onRemovePoint() {
+void MapEditor::onRemovePointFromTable() {
     int row = pointTable_->currentRow();
     if (row >= 0) {
         QTableWidgetItem* idItem = pointTable_->item(row, 0);
@@ -307,7 +345,8 @@ void MapEditor::onRemovePoint() {
             int id = idItem->text().toInt();
             mapData_.removePoint(id);
             updatePointTable();
-            updateEdgeTable();  // 更新边表（可能删除了相关边）
+            updateEdgeTable();
+            canvas_->update();
             emit mapDataChanged(mapData_);
         }
     }
@@ -315,87 +354,65 @@ void MapEditor::onRemovePoint() {
 
 void MapEditor::onPointSelectionChanged() {
     bool hasSelection = pointTable_->currentRow() >= 0;
-    removePointBtn_->setEnabled(hasSelection);
+    removePointTableBtn_->setEnabled(hasSelection);
 }
 
 void MapEditor::onPointDataChanged(int row, int column) {
     if (isUpdating_) return;
-    
+
     QTableWidgetItem* idItem = pointTable_->item(row, 0);
     if (!idItem) return;
-    
+
     int id = idItem->text().toInt();
     MapData::Point* point = mapData_.getPoint(id);
     if (!point) return;
-    
-    // 更新点位数据
-    if (column == 1) {  // 名称
+
+    if (column == 1) {
         point->name = pointTable_->item(row, column)->text();
-    } else if (column == 2) {  // X坐标
+    } else if (column == 2) {
         point->x = pointTable_->item(row, column)->text().toDouble();
-    } else if (column == 3) {  // Y坐标
+    } else if (column == 3) {
         point->y = pointTable_->item(row, column)->text().toDouble();
-    } else if (column == 4) {  // 角度
+    } else if (column == 4) {
         point->theta = pointTable_->item(row, column)->text().toDouble();
-    } else if (column == 5) {  // 类型
+    } else if (column == 5) {
         QComboBox* combo = qobject_cast<QComboBox*>(pointTable_->cellWidget(row, column));
         if (combo) {
             point->type = static_cast<MapData::PointType>(combo->currentIndex());
         }
     }
-    
+
     mapData_.updatePoint(id, *point);
+    canvas_->update();
     emit mapDataChanged(mapData_);
 }
 
-void MapEditor::onAddEdge() {
-    QVector<MapData::Point> points = mapData_.getAllPoints();
-    if (points.size() < 2) {
-        QMessageBox::warning(this, "错误", "至少需要2个点位才能添加边！");
-        return;
-    }
-    
-    // 使用第一个和第二个点位创建边
-    int startId = points[0].id;
-    int endId = points[1].id;
-    
-    MapData::Edge newEdge(startId, points[0].name, endId, points[1].name,
-                         MapData::NAV_FORWARD, MapData::DRIVE_STRAIGHT);
-    mapData_.addEdge(newEdge);
-    updateEdgeTable();
-    emit mapDataChanged(mapData_);
-}
-
-void MapEditor::onRemoveEdge() {
+void MapEditor::onRemoveEdgeFromTable() {
     int row = edgeTable_->currentRow();
     if (row >= 0) {
-        // 从下拉框或表格项获取ID
         int startId = 0;
         int endId = 0;
-        
+
         QComboBox* startIdCombo = qobject_cast<QComboBox*>(edgeTable_->cellWidget(row, 0));
         if (startIdCombo) {
             startId = startIdCombo->currentData().toInt();
         } else {
             QTableWidgetItem* item = edgeTable_->item(row, 0);
-            if (item) {
-                startId = item->text().toInt();
-            }
+            if (item) startId = item->text().toInt();
         }
-        
+
         QComboBox* endIdCombo = qobject_cast<QComboBox*>(edgeTable_->cellWidget(row, 2));
         if (endIdCombo) {
             endId = endIdCombo->currentData().toInt();
         } else {
             QTableWidgetItem* item = edgeTable_->item(row, 2);
-            if (item) {
-                endId = item->text().toInt();
-            }
+            if (item) endId = item->text().toInt();
         }
-        
+
         if (startId != 0 && endId != 0) {
             mapData_.removeEdge(startId, endId);
             updateEdgeTable();
+            canvas_->update();
             emit mapDataChanged(mapData_);
         }
     }
@@ -403,66 +420,53 @@ void MapEditor::onRemoveEdge() {
 
 void MapEditor::onEdgeSelectionChanged() {
     bool hasSelection = edgeTable_->currentRow() >= 0;
-    removeEdgeBtn_->setEnabled(hasSelection);
+    removeEdgeTableBtn_->setEnabled(hasSelection);
 }
 
 void MapEditor::onEdgeDataChanged(int row, int column) {
     if (isUpdating_) return;
-    
-    // 获取起点和终点ID（从下拉框或旧数据）
+
     int startId = 0;
     int endId = 0;
-    
-    // 从下拉框获取起点ID
+
     QComboBox* startIdCombo = qobject_cast<QComboBox*>(edgeTable_->cellWidget(row, 0));
     if (startIdCombo) {
         startId = startIdCombo->currentData().toInt();
     } else {
         QTableWidgetItem* item = edgeTable_->item(row, 0);
-        if (item) {
-            startId = item->text().toInt();
-        }
+        if (item) startId = item->text().toInt();
     }
-    
-    // 从下拉框获取终点ID
+
     QComboBox* endIdCombo = qobject_cast<QComboBox*>(edgeTable_->cellWidget(row, 2));
     if (endIdCombo) {
         endId = endIdCombo->currentData().toInt();
     } else {
         QTableWidgetItem* item = edgeTable_->item(row, 2);
-        if (item) {
-            endId = item->text().toInt();
-        }
+        if (item) endId = item->text().toInt();
     }
-    
+
     if (startId == 0 || endId == 0) return;
-    
-    // 获取起点和终点名称
+
     const MapData::Point* startPoint = mapData_.getPoint(startId);
     const MapData::Point* endPoint = mapData_.getPoint(endId);
-    
+
     if (!startPoint || !endPoint) {
         QMessageBox::warning(this, "错误", "起点或终点不存在！");
         updateEdgeTable();
         return;
     }
-    
-    // 获取旧的起点和终点ID（用于删除旧边）
+
+    QVector<MapData::Edge> edges = mapData_.getAllEdges();
     int oldStartId = 0;
     int oldEndId = 0;
-    
-    // 尝试从当前边数据获取旧ID
-    QVector<MapData::Edge> edges = mapData_.getAllEdges();
     if (row < edges.size()) {
         oldStartId = edges[row].startId;
         oldEndId = edges[row].endId;
     }
-    
-    // 创建新的边对象，先使用默认值
+
     MapData::Edge edge(startId, startPoint->name, endId, endPoint->name,
                       MapData::NAV_FORWARD, MapData::DRIVE_STRAIGHT);
-    
-    // 如果存在旧边，保留其导航模式和行驶模式
+
     if (oldStartId != 0 && oldEndId != 0) {
         for (const MapData::Edge& oldEdge : edges) {
             if (oldEdge.startId == oldStartId && oldEdge.endId == oldEndId) {
@@ -472,101 +476,70 @@ void MapEditor::onEdgeDataChanged(int row, int column) {
             }
         }
     }
-    
-    // 更新导航模式和行驶模式（如果列是4或5）
+
     if (column == 4) {
         QComboBox* combo = qobject_cast<QComboBox*>(edgeTable_->cellWidget(row, column));
-        if (combo) {
-            edge.navMode = static_cast<MapData::NavigationMode>(combo->currentIndex());
-        }
+        if (combo) edge.navMode = static_cast<MapData::NavigationMode>(combo->currentIndex());
     } else if (column == 5) {
         QComboBox* combo = qobject_cast<QComboBox*>(edgeTable_->cellWidget(row, column));
-        if (combo) {
-            edge.driveMode = static_cast<MapData::DriveMode>(combo->currentIndex());
-        }
+        if (combo) edge.driveMode = static_cast<MapData::DriveMode>(combo->currentIndex());
     }
-    
-    // 如果起点或终点ID改变了，需要删除旧边并添加新边
+
     if (oldStartId != 0 && oldEndId != 0 && (startId != oldStartId || endId != oldEndId)) {
         mapData_.removeEdge(oldStartId, oldEndId);
         mapData_.addEdge(edge);
     } else if (oldStartId != 0 && oldEndId != 0) {
-        // ID没变，只更新边
         mapData_.updateEdge(startId, endId, edge);
     } else {
-        // 新边，直接添加（这种情况不应该发生，因为边应该已经存在）
         mapData_.addEdge(edge);
     }
-    
-    // 更新表格显示（刷新名称等）
+
     updateEdgeTable();
+    canvas_->update();
     emit mapDataChanged(mapData_);
 }
 
 QString MapEditor::getFileFilter() const {
     int index = formatCombo_->currentIndex();
-    if (index == 0) {
-        return "JSON文件 (*.json);;所有文件 (*.*)";
-    } else if (index == 1) {
-        return "XML文件 (*.xml);;所有文件 (*.*)";
-    } else {
-        return "二进制文件 (*.map);;所有文件 (*.*)";
-    }
+    if (index == 0) return "JSON文件 (*.json);;所有文件 (*.*)";
+    if (index == 1) return "XML文件 (*.xml);;所有文件 (*.*)";
+    return "二进制文件 (*.map);;所有文件 (*.*)";
 }
 
 QString MapEditor::getFileExtension() const {
     int index = formatCombo_->currentIndex();
-    if (index == 0) {
-        return "json";
-    } else if (index == 1) {
-        return "xml";
-    } else {
-        return "map";
-    }
+    if (index == 0) return "json";
+    if (index == 1) return "xml";
+    return "map";
 }
 
 bool MapEditor::loadMapFile(const QString& filePath) {
     QString ext = QFileInfo(filePath).suffix().toLower();
-    
-    if (ext == "json") {
-        return mapData_.loadFromJson(filePath);
-    } else if (ext == "xml") {
-        return mapData_.loadFromXml(filePath);
-    } else if (ext == "map") {
-        return mapData_.loadFromBinary(filePath);
-    } else {
-        // 尝试自动检测格式
-        if (mapData_.loadFromJson(filePath)) return true;
-        if (mapData_.loadFromXml(filePath)) return true;
-        if (mapData_.loadFromBinary(filePath)) return true;
-        return false;
-    }
+
+    if (ext == "json") return mapData_.loadFromJson(filePath);
+    if (ext == "xml") return mapData_.loadFromXml(filePath);
+    if (ext == "map") return mapData_.loadFromBinary(filePath);
+
+    if (mapData_.loadFromJson(filePath)) return true;
+    if (mapData_.loadFromXml(filePath)) return true;
+    if (mapData_.loadFromBinary(filePath)) return true;
+    return false;
 }
 
 bool MapEditor::saveMapFile(const QString& filePath) {
     QString ext = QFileInfo(filePath).suffix().toLower();
-    
-    if (ext == "json") {
-        return mapData_.saveToJson(filePath);
-    } else if (ext == "xml") {
-        return mapData_.saveToXml(filePath);
-    } else if (ext == "map") {
-        return mapData_.saveToBinary(filePath);
-    } else {
-        // 根据格式选择保存
-        int index = formatCombo_->currentIndex();
-        QString newPath = filePath;
-        if (!newPath.endsWith("." + getFileExtension())) {
-            newPath += "." + getFileExtension();
-        }
-        
-        if (index == 0) {
-            return mapData_.saveToJson(newPath);
-        } else if (index == 1) {
-            return mapData_.saveToXml(newPath);
-        } else {
-            return mapData_.saveToBinary(newPath);
-        }
-    }
-}
 
+    if (ext == "json") return mapData_.saveToJson(filePath);
+    if (ext == "xml") return mapData_.saveToXml(filePath);
+    if (ext == "map") return mapData_.saveToBinary(filePath);
+
+    int index = formatCombo_->currentIndex();
+    QString newPath = filePath;
+    if (!newPath.endsWith("." + getFileExtension())) {
+        newPath += "." + getFileExtension();
+    }
+
+    if (index == 0) return mapData_.saveToJson(newPath);
+    if (index == 1) return mapData_.saveToXml(newPath);
+    return mapData_.saveToBinary(newPath);
+}

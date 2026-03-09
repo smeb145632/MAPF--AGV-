@@ -95,6 +95,7 @@ set(SOURCES
     src/ui/mainwindow.cpp
     src/ui/mapwidget.cpp
     src/ui/mapeditor.cpp
+    src/ui/mapeditorcanvas.cpp
     src/core/vehicle.cpp
     src/core/map.cpp
     src/core/mapdata.cpp
@@ -105,6 +106,7 @@ set(HEADERS
     src/ui/mainwindow.h
     src/ui/mapwidget.h
     src/ui/mapeditor.h
+    src/ui/mapeditorcanvas.h
     src/core/vehicle.h
     src/core/map.h
     src/core/mapdata.h
